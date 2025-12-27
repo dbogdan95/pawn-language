@@ -1,177 +1,179 @@
 {
-    "name": "amxxpawn-language",
-    "displayName": "AMXXPawn Language",
-    "description": "AMXXPawn Language Service",
-    "version": "0.7.5",
-    "publisher": "KliPPy",
-    "license": "GPL-3.0",
-    "icon": "images/extension-logo.png",
-    "galleryBanner": {
-        "theme": "dark",
-        "color": "#251654"
-    },
-    "author": {
-        "name": "KliPPy",
-        "url": "https://forums.alliedmods.net/member.php?u=228599"
-    },
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/rsKliPPy/amxxpawn-language"
-    },
-    "bugs": {
-        "url": "https://github.com/rsKliPPy/amxxpawn-language/issues"
-    },
-    "keywords": [
-        "amxx",
-        "amxmodx",
-        "pawn",
-        "alliedmodders"
-    ],
-    "engines": {
-        "vscode": "^1.11.0"
-    },
-    "categories": [
-        "Languages",
-        "Linters",
-        "Snippets"
-    ],
-    "activationEvents": [
-        "onLanguage:amxxpawn"
-    ],
-    "main": "./build/client/client",
-    "contributes": {
-        "languages": [
-            {
-                "id": "amxxpawn",
-                "aliases": [
-                    "AMXXPawn",
-                    "amxxpawn",
-                    "AMXX Pawn"
-                ],
-                "extensions": [
-                    ".sma",
-                    ".inc"
-                ],
-                "firstLine": "#include\\s+[<\"]?\\s*amxmodx\\s*[>\"]?",
-                "configuration": "./language-configuration.json"
-            },
-            {
-                "id": "pawndoc",
-                "aliases": [
-                    "PAWNDoc",
-                    "PAWN-Doc",
-                    "PAWN Doc"
-                ]
-            }
+  "name": "amxxpawn-language",
+  "displayName": "AMXXPawn Language",
+  "description": "AMXXPawn Language Service",
+  "version": "0.7.6",
+  "publisher": "KliPPy + Bogdan Deaconu",
+  "license": "GPL-3.0",
+  "icon": "images/extension-logo.png",
+  "galleryBanner": {
+    "theme": "dark",
+    "color": "#251654"
+  },
+  "author": {
+    "name": "KliPPy + Bogdan Deaconu",
+    "url": "https://forums.alliedmods.net/member.php?u=228599"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rsKliPPy/amxxpawn-language"
+  },
+  "bugs": {
+    "url": "https://github.com/rsKliPPy/amxxpawn-language/issues"
+  },
+  "keywords": [
+    "amxx",
+    "amxmodx",
+    "pawn",
+    "alliedmodders",
+    "dinscurt"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "activationEvents": [
+    "onLanguage:amxxpawn"
+  ],
+  "main": "./build/client/client",
+  "contributes": {
+    "languages": [
+      {
+        "id": "amxxpawn",
+        "aliases": [
+          "AMXXPawn",
+          "amxxpawn",
+          "AMXX Pawn"
         ],
-        "grammars": [
-            {
-                "language": "amxxpawn",
-                "scopeName": "source.amxxpawn",
-                "path": "./syntaxes/amxxpawn.tmLanguage"
-            },
-            {
-                "language": "pawndoc",
-                "scopeName": "text.pawndoc",
-                "path": "./syntaxes/pawndoc.json",
-                "injectTo": [
-                    "amxxpawn"
-                ]
-            }
+        "extensions": [
+          ".sma",
+          ".inc"
         ],
-        "snippets": [
-            {
-                "language": "amxxpawn",
-                "path": "./snippets/amxxpawn.json"
-            }
-        ],
-        "configuration": {
-            "id": "amxxpawn",
-            "type": "object",
-            "title": "AMXXPawn Configuration",
-            "properties": {
-                "amxxpawn.language.reparseInterval": {
-                    "type": "number",
-                    "default": 1500,
-                    "description": "The shortest allowed interval between two syntax re-parses of the same file"
-                },
-                "amxxpawn.language.webApiLinks": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Should #include statements that contain filenames from AMXX package link to the Web API Reference"
-                },
-                "amxxpawn.compiler.executablePath": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Compiler location"
-                },
-                "amxxpawn.compiler.includePaths": {
-                    "type": "array",
-                    "default": [],
-                    "description": "An array of strings containing include paths for the compiler"
-                },
-                "amxxpawn.compiler.options": {
-                    "type": "array",
-                    "default": [],
-                    "description": "An array of additional options that should be passed to the compiler"
-                },
-                "amxxpawn.compiler.showInfoMessages": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Shows additional information like command arguments and exit code when compiling"
-                },
-                "amxxpawn.compiler.reformatOutput": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Should amxxpc output be reformatted to make it more readable"
-                },
-                "amxxpawn.compiler.outputType": {
-                    "type": "string",
-                    "default": "source",
-                    "description": "Where should .amxx files be output. Can be:\n  - 'source' (same as input)\n  - 'path' (specified in amxxpawn.compiler.outputPath setting)",
-                    "enum": [
-                        "source",
-                        "path"
-                    ]
-                },
-                "amxxpawn.compiler.outputPath": {
-                    "type": "string",
-                    "default": "",
-                    "description": "If amxx.compiler.outputType is set to 'path', then use this path to output .amxx files"
-                },
-                "amxxpawn.compiler.switchToOutput": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Switch to 'Output' tab on build"
-                }
-            }
-        },
-        "commands": [
-            {
-                "command": "amxxpawn.compile",
-                "title": "Compile Plugin",
-                "category": "AMXXPawn"
-            },
-            {
-                "command": "amxxpawn.compileLocal",
-                "title": "Compile Plugin Local",
-                "category": "AMXXPawn"
-            }
+        "firstLine": "#include\\s+[<\"]?\\s*amxmodx\\s*[>\"]?",
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "pawndoc",
+        "aliases": [
+          "PAWNDoc",
+          "PAWN-Doc",
+          "PAWN Doc"
         ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "amxxpawn",
+        "scopeName": "source.amxxpawn",
+        "path": "./syntaxes/amxxpawn.tmLanguage"
+      },
+      {
+        "language": "pawndoc",
+        "scopeName": "text.pawndoc",
+        "path": "./syntaxes/pawndoc.json",
+        "injectTo": [
+          "amxxpawn"
+        ]
+      }
+    ],
+    "snippets": [
+      {
+        "language": "amxxpawn",
+        "path": "./snippets/amxxpawn.json"
+      }
+    ],
+    "configuration": {
+      "id": "amxxpawn",
+      "type": "object",
+      "title": "AMXXPawn Configuration",
+      "properties": {
+        "amxxpawn.language.reparseInterval": {
+          "type": "number",
+          "default": 1500,
+          "description": "The shortest allowed interval between two syntax re-parses of the same file"
+        },
+        "amxxpawn.language.webApiLinks": {
+          "type": "boolean",
+          "default": false,
+          "description": "Should #include statements that contain filenames from AMXX package link to the Web API Reference"
+        },
+        "amxxpawn.compiler.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Compiler location"
+        },
+        "amxxpawn.compiler.includePaths": {
+          "type": "array",
+          "default": [],
+          "description": "An array of strings containing include paths for the compiler"
+        },
+        "amxxpawn.compiler.options": {
+          "type": "array",
+          "default": [],
+          "description": "An array of additional options that should be passed to the compiler"
+        },
+        "amxxpawn.compiler.showInfoMessages": {
+          "type": "boolean",
+          "default": false,
+          "description": "Shows additional information like command arguments and exit code when compiling"
+        },
+        "amxxpawn.compiler.reformatOutput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Should amxxpc output be reformatted to make it more readable"
+        },
+        "amxxpawn.compiler.outputType": {
+          "type": "string",
+          "default": "source",
+          "description": "Where should .amxx files be output. Can be:\n  - 'source' (same as input)\n  - 'path' (specified in amxxpawn.compiler.outputPath setting)",
+          "enum": [
+            "source",
+            "path"
+          ]
+        },
+        "amxxpawn.compiler.outputPath": {
+          "type": "string",
+          "default": "",
+          "description": "If amxx.compiler.outputType is set to 'path', then use this path to output .amxx files"
+        },
+        "amxxpawn.compiler.switchToOutput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Switch to 'Output' tab on build"
+        }
+      }
     },
-    "scripts": {
-        "vscode:prepublish": "tsc -p ./",
-        "compile": "tsc -watch -p ./",
-        "postinstall": "node ./node_modules/vscode/bin/install"
-    },
-    "devDependencies": {
-        "@types/node": "^6.0.40",
-        "typescript": "^2.0.3",
-        "vscode": "^1.1.10"
-    },
-    "dependencies": {
-        "vscode-languageclient": "^3.3.0",
-        "vscode-languageserver": "^3.3.0",
-        "vscode-uri": "^1.0.1"
-    }
+    "commands": [
+      {
+        "command": "amxxpawn.compile",
+        "title": "Compile Plugin",
+        "category": "AMXXPawn"
+      },
+      {
+        "command": "amxxpawn.compileLocal",
+        "title": "Compile Plugin Local",
+        "category": "AMXXPawn"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^8.1.0",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-uri": "^3.0.7"
+  }
 }

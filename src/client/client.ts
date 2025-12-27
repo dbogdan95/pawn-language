@@ -2,70 +2,86 @@
 
 import * as Path from 'path';
 import * as VSC from 'vscode';
-import * as VSCLC from 'vscode-languageclient';
+
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  TransportKind
+} from 'vscode-languageclient/node';
+
 import * as Commands from './commands';
 
 let diagnosticCollection: VSC.DiagnosticCollection;
-
+let languageClient: LanguageClient | undefined;
 
 export function activate(ctx: VSC.ExtensionContext) {
-    const serverModulePath = ctx.asAbsolutePath(Path.join('build', 'server', 'server.js'));
-    const debugOptions = { execArgv: ['--nolazy', '--inspect=5858'] };
+  const serverModulePath = ctx.asAbsolutePath(Path.join('build', 'server', 'server.js'));
+  const debugOptions = { execArgv: ['--nolazy', '--inspect=5858'] };
 
-    const serverOptions: VSCLC.ServerOptions = {
-        run: {
-            module: serverModulePath,
-            transport: VSCLC.TransportKind.ipc,
-            options: debugOptions
-        },
-        debug: {
-            module: serverModulePath,
-            transport: VSCLC.TransportKind.ipc,
-            options: debugOptions
-        }
-    };
+  const serverOptions: ServerOptions = {
+    run: {
+      module: serverModulePath,
+      transport: TransportKind.ipc,
+      options: debugOptions
+    },
+    debug: {
+      module: serverModulePath,
+      transport: TransportKind.ipc,
+      options: debugOptions
+    }
+  };
 
-    const clientOptions: VSCLC.LanguageClientOptions = {
-        documentSelector: [ 'amxxpawn' ],
-        synchronize: {
-            configurationSection: [
-                'amxxpawn.language',
-                'amxxpawn.compiler'
-            ],
-            fileEvents: VSC.workspace.createFileSystemWatcher('**/*.*')
-        }
-    };
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: [{ language: 'amxxpawn' }],
+    synchronize: {
+      configurationSection: [
+        'amxxpawn.language',
+        'amxxpawn.compiler'
+      ],
+      fileEvents: VSC.workspace.createFileSystemWatcher('**/*.*')
+    }
+  };
 
-    const languageClient = new VSCLC.LanguageClient('amxxpawn', 'AMXXPawn Language Service', serverOptions, clientOptions);
+  languageClient = new LanguageClient(
+    'amxxpawn',
+    'AMXXPawn Language Service',
+    serverOptions,
+    clientOptions
+  );
 
-    const outputChannel = VSC.window.createOutputChannel('AMXXPC Output / AMXXPawn');
+  const outputChannel = VSC.window.createOutputChannel('AMXXPC Output / AMXXPawn');
 
-    diagnosticCollection = VSC.languages.createDiagnosticCollection('amxxpawn');
-    
-    const commandCompile = VSC.commands.registerCommand('amxxpawn.compile', Commands.compile.bind(null, outputChannel, diagnosticCollection));
-    const commandCompileLocal = VSC.commands.registerCommand('amxxpawn.compileLocal', Commands.compileLocal.bind(null, outputChannel, diagnosticCollection));
+  diagnosticCollection = VSC.languages.createDiagnosticCollection('amxxpawn');
 
-    VSC.workspace.onDidChangeTextDocument(onDidChangeTextDocument);
-    
-    // Push all disposables
-    ctx.subscriptions.push(
-        languageClient.start(),
+  const commandCompile = VSC.commands.registerCommand(
+    'amxxpawn.compile',
+    Commands.compile.bind(null, outputChannel, diagnosticCollection)
+  );
 
-        diagnosticCollection,
+  const commandCompileLocal = VSC.commands.registerCommand(
+    'amxxpawn.compileLocal',
+    Commands.compileLocal.bind(null, outputChannel, diagnosticCollection)
+  );
 
-        // Commands
-        commandCompile,
-        commandCompileLocal,
-        
-        // Output channels
-        VSC.Disposable.from(outputChannel)
-    );
+  VSC.workspace.onDidChangeTextDocument(onDidChangeTextDocument);
+
+  ctx.subscriptions.push(
+    diagnosticCollection,
+    commandCompile,
+    commandCompileLocal,
+    outputChannel
+  );
+
+  void languageClient.start();
 }
 
 function onDidChangeTextDocument(ev: VSC.TextDocumentChangeEvent) {
-    diagnosticCollection.delete(ev.document.uri);
+  diagnosticCollection.delete(ev.document.uri);
 }
 
-export function deactivate() {
-
+export async function deactivate() {
+  if (languageClient) {
+    await languageClient.stop();
+  }
 }

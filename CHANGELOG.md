@@ -1,3 +1,39 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+This project is a maintained and modernized fork of the original
+**AMXXPawn Language** extension, originally created by **KliPPy**.
+
+This fork is currently maintained and updated by **Bogdan Deaconu**.
+
+---
+
+## [Version 1.0.0] - 2025-12-27
+### Added
+- Modernized extension to work with current VS Code versions (2024+)
+- Updated Language Server and Client to latest stable APIs
+- Proper support for `${workspaceFolder}` in:
+  - compiler executable path
+  - include paths
+  - output paths
+- Correct handling of workspace folders (multi-root & debug host compatible)
+- Better diagnostics and logging during compilation
+
+### Changed
+- Upgraded TypeScript to a modern version
+- Updated `vscode-languageclient` and `vscode-languageserver`
+- Replaced deprecated VS Code APIs (`workspace.rootPath`, legacy imports)
+- Refactored extension lifecycle handling (start/stop Language Client correctly)
+- Improved internal path resolution logic for robustness
+
+### Notes
+- This release is a **non-breaking functional modernization**
+- No language features were removed
+- Fully compatible with existing AMXXPawn projects
+
+---
+
 ## [Version 0.7.0] - 2018-03-01
 ### Added
 - Go to Definition/Peek Definition for functions and global variables
@@ -7,15 +43,17 @@
 - Doc-comments are now displayed on signature help/hover/completions
 - Pawndoc grammar - doc-comments are highlighted separately
 
+---
 
 ## [Version 0.6.3] - 2018-02-23
 ### Added
 - Marketplace icon and banner
 - `//#region` and `//#endregion`
 
-## Fixed
+### Fixed
 - Automatically switches to AMXXPawn if there's `#include <amxmodx>` on the first code line
 
+---
 
 ## [Version 0.6.0] - 2018-02-22
 ### Added
@@ -24,13 +62,14 @@
 
 ### Changed
 - Doesn't append `'('` and `'()'` on function autocompletions anymore
-- Sytax highlight improvements
+- Syntax highlight improvements
 - `'^'` is now the string escape character
 
 ### Fixed
 - Symbols starting with `'@'` weren't being parsed
 - Included files that are local to the source file weren't being resolved correctly
 
+---
 
 ## [Version 0.5.0] - 2017-08-31
 ### Added
@@ -42,78 +81,87 @@
 
 ### Changed
 - Syntax highlight now highlights only known tags from AMXX
-- Completion search is now case-insensitive (e.g: typing `null` now mathces `NULL_VECTOR`)
-- `amxxpawn.language.webApiLinks` and `amxxpawn.compiler.showInfoMessages` settings are now false by default
+- Completion search is now case-insensitive
+- `amxxpawn.language.webApiLinks` and `amxxpawn.compiler.showInfoMessages` are now false by default
 
+---
 
 ## [Version 0.4.0] - 2017-08-29
 ### Added
 - Suggestions/completions for variables and constants
-- Some diagnostics for variable/constant definitions
-- `amxxpawn.compiler.showInfoMessages` setting - whether compile process shows additional information (arguments, exit code...)
+- Diagnostics for variable/constant definitions
+- `amxxpawn.compiler.showInfoMessages` setting
 
 ### Fixed
-- `[]` and `()` pairs now highlighted too (only `{}` pairs were before)
-- CWD is now set to amxxpc's directory when running it
+- Highlighting for `[]` and `()` pairs
+- Correct CWD when running amxxpc
 
+---
 
 ## [Version 0.3.1] - 2017-08-27
 ### Added
-- Reparses open documents when configuration changes
+- Reparse open documents when configuration changes
 
 ### Fixed
-- The parser now substitutes variables in `amxxpawn.compiler.includePaths` too
+- Variable substitution in `includePaths`
 
+---
 
 ## [Version 0.3.0] - 2017-08-27
 ### Added
-- Substitution variables are now allowed in settings containing paths
-- More diagnostics to the **#include** statement parser
+- Substitution variables allowed in path settings
+- More diagnostics for `#include` statements
 
 ### Fixed
-- **#include** statements parser now provides links and diagnostics with a correct character range
+- Correct character ranges for include diagnostics
 
+---
 
 ## [Version 0.2.1] - 2017-08-27
 ### Added
-- Handle **#tryinclude** statements and underline if can't resolve, but don't produce an error
-- Report unmatched closing braces
+- Support for `#tryinclude` without hard errors
+- Diagnostics for unmatched closing braces
 
 ### Fixed
-- Properly parse and resolve **#include** statements
-- Properly handle multiple multiline comments on the same line
-- Properly handle multiple braces on the same line
+- Include resolution bugs
+- Multiline comment parsing issues
 
+---
 
 ## [Version 0.2.0] - 2017-08-25
 ### Added
-- Document symbol lookup (`Ctrl+Shift+O`) - Easy way to search and navigate to any symbol in the currently opened document
-- Symbol completion - displays suggestions as you type
+- Document symbol lookup (`Ctrl+Shift+O`)
+- Symbol completion
 
 ### Fixed
-- Included dependencies are now properly managed, no more data leaks
+- Dependency management memory leaks
 
+---
 
 ## [Version 0.1.0] - 2017-08-25
 ### Added
-- 'Compile Plugin Local' command which searches for amxxpc executable in input file's path
+- Compile Plugin Local command
 
+---
 
 ## [Version 0.0.5] - 2017-08-25
 ### Fixed
-- Fixed amxxpawn.compiler.outputType === 'path'
-- AMXXPC Output panel now gets focus on compilation
+- `outputType === 'path'`
+- Output panel focus on compilation
 
+---
 
 ## [Version 0.0.4] - 2017-08-25
 ### Fixed
-- Whitespaces between function's tag and identifier would break the parser
+- Parser issues with whitespaces
 
+---
 
 ## [Version 0.0.3] - 2017-08-25
 ### Fixed
-- Crash when parsing functions with no storage specifiers
+- Crash when parsing functions without storage specifiers
 
+---
 
 ## [Version 0.0.1] - 2017-08-25
 - Initial release

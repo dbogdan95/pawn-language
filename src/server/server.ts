@@ -2,8 +2,24 @@
 
 import * as FS from 'fs';
 import * as Path from 'path';
-import * as VSCLS from 'vscode-languageserver';
-import Uri from 'vscode-uri';
+
+import {
+  createConnection,
+  IPCMessageReader,
+  IPCMessageWriter,
+  TextDocuments,
+  TextDocumentSyncKind,
+  DocumentLink,
+  Location,
+  SymbolInformation,
+  SymbolKind,
+  Diagnostic,
+  DiagnosticSeverity
+} from 'vscode-languageserver/node';
+
+import { TextDocument } from 'vscode-languageserver-textdocument';
+
+import { URI } from 'vscode-uri';
 import * as Settings from '../common/settings-types'; 
 import * as Parser from './parser';
 import * as Types from './types';
@@ -14,25 +30,29 @@ import {amxxDefaultHeaders} from './amxx-default-headers';
 
 let syncedSettings: Settings.SyncedSettings;
 let dependencyManager: DM.FileDependencyManager = new DM.FileDependencyManager();
-let documentsData: WeakMap<VSCLS.TextDocument, Types.DocumentData> = new WeakMap();
+let documentsData: WeakMap<TextDocument, Types.DocumentData> = new WeakMap();
 let dependenciesData: WeakMap<DM.FileDependency, Types.DocumentData> = new WeakMap();
 let workspaceRoot: string = '';
 
 /**
  * In future switch to incremental sync
  */
-const connection = VSCLS.createConnection(new VSCLS.IPCMessageReader(process), new VSCLS.IPCMessageWriter(process));
-const documentsManager = new VSCLS.TextDocuments();
+const connection = createConnection(new IPCMessageReader(process), new IPCMessageWriter(process));
+const documentsManager = new TextDocuments(TextDocument);
 
 documentsManager.listen(connection);
 connection.listen();
 
 connection.onInitialize((params) => {
-    workspaceRoot = params.rootUri;
+    workspaceRoot =
+        params.rootUri ??
+        (params.workspaceFolders && params.workspaceFolders.length > 0
+        ? params.workspaceFolders[0].uri
+        : '');
 
     return {
         capabilities: {
-            textDocumentSync: documentsManager.syncKind,
+            textDocumentSync: TextDocumentSyncKind.Incremental,
             documentLinkProvider: {
                resolveProvider: false 
             },
@@ -51,8 +71,8 @@ connection.onInitialize((params) => {
 });
 
 connection.onDocumentLinks((params) => {
-    function inclusionsToLinks(inclusions: Types.InclusionDescriptor[]): VSCLS.DocumentLink[] {
-        const links: VSCLS.DocumentLink[] = [];
+    function inclusionsToLinks(inclusions: Types.InclusionDescriptor[]): DocumentLink[] {
+        const links: DocumentLink[] = [];
 
         inclusions.forEach((inclusion) => {
             let filename = inclusion.filename;
@@ -83,21 +103,29 @@ connection.onDocumentLinks((params) => {
 });
 
 connection.onDidChangeConfiguration((params) => {
-    const workspacePath = Uri.parse(workspaceRoot).fsPath;
+    const workspacePath = URI.parse(workspaceRoot).fsPath;
+
     syncedSettings = params.settings.amxxpawn as Settings.SyncedSettings;
-    syncedSettings.compiler.includePaths = syncedSettings.compiler.includePaths.map((path) => resolvePathVariables(path, workspacePath, undefined));
+
+    const includePaths = syncedSettings.compiler.includePaths || [];
+
+    syncedSettings.compiler.includePaths = includePaths.length > 0
+        ? includePaths.map(p =>
+            resolveIncludePathWithWorkspaceFallback(p, workspacePath)
+        )
+        : [Path.join(workspacePath, 'include')];
 
     documentsManager.all().forEach(reparseDocument);
 });
 
 connection.onDefinition((params) => {
-    function inclusionLocation(inclusions: Types.ResolvedInclusion[]): VSCLS.Location {
+    function inclusionLocation(inclusions: Types.ResolvedInclusion[]): Location {
         for(const inc of inclusions) {
             if( params.position.line === inc.descriptor.start.line
                 && params.position.character > inc.descriptor.start.character
                 && params.position.character < inc.descriptor.end.character
             ) {
-                return VSCLS.Location.create(inc.uri, {
+                return Location.create(inc.uri, {
                     start: { line: 0, character: 0 },
                     end: { line: 0, character: 1 }
                 });
@@ -134,7 +162,7 @@ connection.onSignatureHelp((params) => {
 connection.onDocumentSymbol((params) => {
     const data = documentsData.get(documentsManager.get(params.textDocument.uri));
 
-    const symbols: VSCLS.SymbolInformation[] = data.callables.map<VSCLS.SymbolInformation>((clb) => ({
+    const symbols: SymbolInformation[] = data.callables.map<SymbolInformation>((clb) => ({
         name: clb.identifier,
         location: {
             range: {
@@ -143,7 +171,7 @@ connection.onDocumentSymbol((params) => {
             },
             uri: params.textDocument.uri
         },
-        kind: VSCLS.SymbolKind.Function
+        kind: SymbolKind.Function
     }));
 
     return symbols;
@@ -205,14 +233,14 @@ function resolveIncludePath(filename: string, localTo: string): string {
 
         try {
             FS.accessSync(path, FS.constants.R_OK);
-            return Uri.file(path).toString();
+            return URI.file(path).toString();
         } catch(err) {
             // Append .inc and try again
             // amxxpc actually tries to append .p and .pawn in addition to .inc, but nobody uses those
             try {
                 path += '.inc';
                 FS.accessSync(path, FS.constants.R_OK);
-                return Uri.file(path).toString();
+                return URI.file(path).toString();
             } catch(err) {
                 continue;
             }
@@ -223,7 +251,7 @@ function resolveIncludePath(filename: string, localTo: string): string {
 }
 
 // Should probably move this to 'parser.ts'
-function parseFile(fileUri: Uri, content: string, data: Types.DocumentData, diagnostics: Map<string, VSCLS.Diagnostic[]>, isDependency: boolean) {
+function parseFile(fileUri: URI, content: string, data: Types.DocumentData, diagnostics: Map<string, Diagnostic[]>, isDependency: boolean) {
     let myDiagnostics = [];
     diagnostics.set(data.uri, myDiagnostics);
     // We are going to list all dependencies here first before we add them to data.dependencies
@@ -236,7 +264,7 @@ function parseFile(fileUri: Uri, content: string, data: Types.DocumentData, diag
     myDiagnostics.push(...results.diagnostics);
 
     results.headerInclusions.forEach((header) => {
-        const resolvedUri = resolveIncludePath(header.filename, header.isLocal ? Path.dirname(Uri.parse(data.uri).fsPath) : undefined);
+        const resolvedUri = resolveIncludePath(header.filename, header.isLocal ? Path.dirname(URI.parse(data.uri).fsPath) : undefined);
         if(resolvedUri === data.uri) {
             return;
         }
@@ -259,8 +287,8 @@ function parseFile(fileUri: Uri, content: string, data: Types.DocumentData, diag
                 
                 // This should probably be made asynchronous in the future as it probably
                 // blocks the event loop for a considerable amount of time.
-                const content = FS.readFileSync(Uri.parse(dependency.uri).fsPath).toString();
-                parseFile(Uri.parse(dependency.uri), content, depData, diagnostics, true);
+                const content = FS.readFileSync(URI.parse(dependency.uri).fsPath).toString();
+                parseFile(URI.parse(dependency.uri), content, depData, diagnostics, true);
             }
 
             data.resolvedInclusions.push({
@@ -270,7 +298,7 @@ function parseFile(fileUri: Uri, content: string, data: Types.DocumentData, diag
         } else {
             myDiagnostics.push({
                 message: `Couldn't resolve include path '${header.filename}'. Check compiler include paths.`,
-                severity: header.isSilent ? VSCLS.DiagnosticSeverity.Information : VSCLS.DiagnosticSeverity.Error,
+                severity: header.isSilent ? DiagnosticSeverity.Information : DiagnosticSeverity.Error,
                 source: 'amxxpawn',
                 range: {
                     start: header.start,
@@ -288,17 +316,43 @@ function parseFile(fileUri: Uri, content: string, data: Types.DocumentData, diag
     data.values = results.values;
 }
 
-function reparseDocument(document: VSCLS.TextDocument) {
+function reparseDocument(document: TextDocument) {
     const data = documentsData.get(document);
     if(data === undefined) {
         return;
     }
     data.reparseTimer = null;
 
-    const diagnostics: Map<string, VSCLS.Diagnostic[]> = new Map();
+    const diagnostics: Map<string, Diagnostic[]> = new Map();
 
-    parseFile(Uri.parse(document.uri), document.getText(), data, diagnostics, false);
+    parseFile(URI.parse(document.uri), document.getText(), data, diagnostics, false);
     // Find and remove any dangling nodes in the dependency graph
     Helpers.removeUnreachableDependencies(documentsManager.all().map((doc) => documentsData.get(doc)), dependencyManager, dependenciesData);
     diagnostics.forEach((ds, uri) => connection.sendDiagnostics({ uri: uri, diagnostics: ds }));
 }
+
+function resolveIncludePathWithWorkspaceFallback(
+  inputPath: string | undefined,
+  workspacePath: string
+): string {
+  // Default fallback: <workspace>/include
+  if (!inputPath || inputPath.trim() === '') {
+    return Path.join(workspacePath, 'include');
+  }
+
+  // Expand VSCode-style variables that may come through as raw strings
+  const expanded = inputPath
+    .replace(/\$\{workspaceFolder\}/g, workspacePath)
+    .replace(/\$\{workspaceRoot\}/g, workspacePath);
+
+  const resolved = resolvePathVariables(expanded, workspacePath, undefined);
+
+  // Absolute path: respect it
+  if (Path.isAbsolute(resolved)) {
+    return resolved;
+  }
+
+  // Relative path: make it workspace-relative
+  return Path.join(workspacePath, resolved);
+}
+

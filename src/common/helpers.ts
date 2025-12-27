@@ -1,6 +1,4 @@
 import * as Path from 'path';
-import Uri from 'vscode-uri';
-
 
 function substituteVariables(variable: string, workspacePath: string, filePath: string) {
     switch(variable) {

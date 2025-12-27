@@ -7,6 +7,23 @@ import * as VSC from 'vscode';
 import * as Settings from '../common/settings-types';
 import * as Helpers from '../common/helpers';
 
+function getWorkspaceFolderPathForFile(filePath: string): string | undefined {
+  const folder = VSC.workspace.getWorkspaceFolder(VSC.Uri.file(filePath));
+  return folder?.uri.fsPath;
+}
+
+function expandWorkspaceVars(value: string, workspacePath: string | undefined): string {
+  if (!workspacePath) return value;
+  return value
+    .replace(/\$\{workspaceFolder\}/g, workspacePath)
+    .replace(/\$\{workspaceRoot\}/g, workspacePath);
+}
+
+function resolveWithWorkspace(value: string, workspacePath: string | undefined, inputPath: string): string {
+  const expanded = expandWorkspaceVars(value, workspacePath);
+  return Helpers.resolvePathVariables(expanded, workspacePath, inputPath);
+}
+
 interface OutputDiagnostic {
     // 'warning' | 'error'
     type: string;
@@ -29,9 +46,12 @@ class OutputData {
 function doCompile(executablePath: string, inputPath: string, compilerSettings: Settings.CompilerSettings, outputChannel: VSC.OutputChannel, diagnosticCollection: VSC.DiagnosticCollection) {
     diagnosticCollection.clear();
 
+    const workspacePath = getWorkspaceFolderPathForFile(inputPath);
+
     let outputPath = '';
     if(compilerSettings.outputType === 'path') {
-        outputPath = Helpers.resolvePathVariables(compilerSettings.outputPath, VSC.workspace.rootPath, inputPath) 
+        outputPath = resolveWithWorkspace(compilerSettings.outputPath, workspacePath, inputPath);
+
         if(!FS.existsSync(outputPath)) {
             outputChannel.appendLine(`Path ${outputPath} doesn't exist. Compilation aborted.`);
             return;
@@ -45,11 +65,11 @@ function doCompile(executablePath: string, inputPath: string, compilerSettings: 
         outputChannel.appendLine('\'amxxpc.compiler.outputType\' setting has an invalid value.');
         return;
     }
-
+    
     const compilerArgs: string[] = [
         inputPath,
         ...compilerSettings.options,
-        ...compilerSettings.includePaths.map((path) => `-i${Helpers.resolvePathVariables(path, VSC.workspace.rootPath, inputPath)}`),
+        ...compilerSettings.includePaths.map((p) => `-i${resolveWithWorkspace(p, workspacePath, inputPath)}`),
         `-o${outputPath}`
     ];
     const spawnOptions: CP.SpawnOptions = {
@@ -113,8 +133,8 @@ function doCompile(executablePath: string, inputPath: string, compilerSettings: 
 
             if(/Done\./.test(compilerStdout) === true) {
                 let outputFilePath = '';
-                if(VSC.workspace.rootPath !== undefined) {
-                    const relativePath = Path.relative(VSC.workspace.rootPath, outputPath);
+                if (workspacePath) {
+                    const relativePath = Path.relative(workspacePath, outputPath);
                     if(!relativePath.startsWith('../')) {
                         outputFilePath = relativePath;
                     }
@@ -129,8 +149,8 @@ function doCompile(executablePath: string, inputPath: string, compilerSettings: 
                 const diagnostics = data[1].diagnostics;
                 const resourceDiagnostics: VSC.Diagnostic[] = [];
                 
-                if(VSC.workspace.rootPath !== undefined) {
-                    const relativePath = Path.relative(VSC.workspace.rootPath, filePath);
+                if (workspacePath) {
+                    const relativePath = Path.relative(workspacePath, filePath);
                     if(!relativePath.startsWith('../')) {
                         filePath = relativePath;
                     }
@@ -179,7 +199,8 @@ export function compile(outputChannel: VSC.OutputChannel, diagnosticCollection: 
         return;
     }
     const inputPath = editor.document.uri.fsPath;
-    const executablePath = Helpers.resolvePathVariables(compilerSettings.executablePath, VSC.workspace.rootPath, inputPath);
+    const workspacePath = getWorkspaceFolderPathForFile(inputPath);
+    const executablePath = resolveWithWorkspace(compilerSettings.executablePath, workspacePath, inputPath);
 
     FS.access(executablePath, FS.constants.X_OK, (err) => {
         if(err) {
@@ -248,9 +269,10 @@ export function compileLocal(outputChannel: VSC.OutputChannel, diagnosticCollect
             executablePath = Path.join(executableDir, potentialFiles[0]);
         }
 
-        FS.access(executablePath, FS.constants.X_OK, (err) => {
-            if(err) {
-                outputChannel.appendLine('Can\'t access amxxpc. Please check if you have permissions to execute amxxpc.');
+        FS.access(executablePath, FS.constants.F_OK, (err) => {
+            if (err) {
+                outputChannel.appendLine(`Can't access amxxpc at: ${executablePath}`);
+                outputChannel.appendLine('Please check amxxpawn.compiler.executablePath and your permissions.');
                 return;
             }
             
