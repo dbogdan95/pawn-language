@@ -10,6 +10,7 @@ This fork is currently maintained and updated by **Bogdan Deaconu**.
 ---
 
 ## [Version 1.0.0] - 2025-12-27
+
 ### Added
 - Modernized extension to work with current VS Code versions (2024+)
 - Updated Language Server and Client to the latest stable APIs
@@ -18,7 +19,11 @@ This fork is currently maintained and updated by **Bogdan Deaconu**.
   - include paths
   - output paths
 - Correct handling of workspace folders (multi-root and debug host compatible)
-- Improved diagnostics and logging during compilation
+- Improved diagnostics and detailed logging during compilation
+- Extra language settings for fine-grained control over:
+  - inlay hints
+  - hover details
+  - enum highlighting
 - Per-feature settings toggles for language server features, including:
   - go to definition
   - find references
@@ -29,28 +34,35 @@ This fork is currently maintained and updated by **Bogdan Deaconu**.
   - formatting
   - semantic macro highlighting
 - Go to definition for:
-  - non-public functions and local functions
+  - non-public and local functions
   - macros (`#define`), enums, const, new const, and variables declared in multi-line lists
   - local variables and function parameters
 - References and CodeLens:
-  - reference counts above declarations
+  - reference counts displayed above declarations
   - direct jump to the single reference when only one exists
-  - automatic refresh on document changes
 - Parameter inlay hints for:
   - function calls
   - natives
   - stocks
   - macros
+- Hover improvements:
+  - display constant values
+  - show inline `//` comments for `#define`
+  - prevent doc-comment bleed into unrelated symbols
+  - local hover support for constants and variables
+- Enum usage highlighting inside `[]`
 - Macro highlighting via semantic tokens
-- Auto-indent support (document formatting and on-type), with automatic dedent after `return`, `break`, and `continue`
-- Define value hints for numeric or string defines (shown inline)
+- Smarter handling of `#define` aliases versus const-like macros
+- More robust parsing of array and struct initializers
+- Auto-indent support (document formatting and on-type).
+- Inline define value hints for numeric and string defines
 
 ### Changed
 - Upgraded TypeScript to a modern version
 - Updated `vscode-languageclient` and `vscode-languageserver`
 - Replaced deprecated VS Code APIs (`workspace.rootPath`, legacy imports)
-- Refactored extension lifecycle handling (start/stop Language Client correctly)
-- Improved internal path resolution logic for robustness
+- Refactored extension lifecycle handling (proper Language Client start and stop)
+- Improved internal path resolution logic for better robustness
 
 ---
 

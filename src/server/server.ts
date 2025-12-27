@@ -11,6 +11,7 @@ import {
   TextDocumentSyncKind,
   DocumentLink,
   Location,
+  Range,
   CodeLens,
   Command,
   InlayHint,
@@ -59,13 +60,19 @@ const defaultSettings: Settings.SyncedSettings = {
         enableReferences: true,
         enableCodeLensReferences: true,
         enableInlayHints: true,
+        enableInlayHintParameters: true,
+        enableInlayHintConstValues: true,
+        enableInlayHintConstValueStrings: false,
         enableSignatureHelp: true,
         enableHover: true,
+        enableHoverConstValues: true,
+        enableHoverDefineInlineComments: true,
         enableCompletions: true,
         enableDocumentSymbols: true,
         enableDocumentFormatting: true,
         enableOnTypeFormatting: true,
-        enableSemanticMacros: true
+        enableSemanticMacros: true,
+        enableSemanticEnumUsage: true
     }
 };
 
@@ -126,6 +133,20 @@ connection.onInitialize((params) => {
     };
 });
 
+function getDocumentData(uri: string): { document: TextDocument; data: Types.DocumentData } | null {
+    const document = documentsManager.get(uri);
+    if (document === undefined) {
+        return null;
+    }
+
+    const data = documentsData.get(document);
+    if (data === undefined) {
+        return null;
+    }
+
+    return { document, data };
+}
+
 connection.onDocumentLinks((params) => {
     function inclusionsToLinks(inclusions: Types.InclusionDescriptor[]): DocumentLink[] {
         const links: DocumentLink[] = [];
@@ -154,9 +175,12 @@ connection.onDocumentLinks((params) => {
     }
 
     if(syncedSettings.language.webApiLinks === true) {
-        const data = documentsData.get(documentsManager.get(params.textDocument.uri));
+        const docData = getDocumentData(params.textDocument.uri);
+        if (!docData) {
+            return null;
+        }
         
-        return inclusionsToLinks(data.resolvedInclusions.map((inclusion) => inclusion.descriptor));
+        return inclusionsToLinks(docData.data.resolvedInclusions.map((inclusion) => inclusion.descriptor));
     }
     
     return null;
@@ -208,28 +232,27 @@ connection.onDefinition((params) => {
         return null;
     }
 
-    const document = documentsManager.get(params.textDocument.uri);
-    if(document === undefined) {
+    const docData = getDocumentData(params.textDocument.uri);
+    if (!docData) {
         return null;
     }
 
-    const data = documentsData.get(document);
-    const location = inclusionLocation(data.resolvedInclusions);
+    const location = inclusionLocation(docData.data.resolvedInclusions);
     if(location !== null) {
         return location;
     }
 
-    const identifier = Parser.getIdentifierForReferences(document.getText(), params.position);
+    const identifier = Parser.getIdentifierForReferences(docData.document.getText(), params.position);
     if (identifier.length > 0) {
-        const isOnCallableDecl = data.callables.some((clb) => (
+        const isOnCallableDecl = docData.data.callables.some((clb) => (
             clb.identifier === identifier &&
             clb.start.line === params.position.line &&
             params.position.character >= clb.start.character &&
             params.position.character <= clb.end.character
         ));
         if (isOnCallableDecl) {
-            const refs = collectReferencesForIdentifier(identifier, data);
-            const callable = data.callables.find((clb) => (
+            const refs = collectReferencesForIdentifier(identifier, docData.data);
+            const callable = docData.data.callables.find((clb) => (
                 clb.identifier === identifier &&
                 clb.start.line === params.position.line &&
                 params.position.character >= clb.start.character &&
@@ -241,9 +264,46 @@ connection.onDefinition((params) => {
             }
             return filtered;
         }
+        const isOnValueDecl = docData.data.values.some((val) => (
+            val.identifier === identifier &&
+            val.range.start.line === params.position.line &&
+            params.position.character >= val.range.start.character &&
+            params.position.character <= val.range.end.character
+        ));
+        if (isOnValueDecl) {
+            const refs = collectReferencesForIdentifier(identifier, docData.data);
+            const value = docData.data.values.find((val) => (
+                val.identifier === identifier &&
+                val.range.start.line === params.position.line &&
+                params.position.character >= val.range.start.character &&
+                params.position.character <= val.range.end.character
+            ));
+            const filtered = value ? refs.filter((loc) => !isSameValueLocation(loc, value)) : refs;
+            if (filtered.length === 1) {
+                return filtered[0];
+            }
+            return filtered;
+        }
+        const localRange = Parser.getLocalValueRangeAtPosition(
+            docData.document.getText(),
+            params.position,
+            identifier
+        );
+        if (localRange) {
+            const localRefs = Helpers.findReferencesInDocument(
+                docData.document.uri,
+                docData.document.getText(),
+                identifier
+            );
+            const filtered = localRefs.filter((loc) => !isSameRangeLocation(loc, docData.document.uri, localRange));
+            if (filtered.length === 1) {
+                return filtered[0];
+            }
+            return filtered;
+        }
     }
 
-    return Parser.doDefinition(document.getText(), params.position, data, dependenciesData);
+    return Parser.doDefinition(docData.document.getText(), params.position, docData.data, dependenciesData);
 });
 
 connection.onSignatureHelp((params) => {
@@ -251,13 +311,12 @@ connection.onSignatureHelp((params) => {
         return null;
     }
 
-    const document = documentsManager.get(params.textDocument.uri);
-    if(document === undefined) {
+    const docData = getDocumentData(params.textDocument.uri);
+    if (!docData) {
         return null;
     }
 
-    const data = documentsData.get(document);
-    return Parser.doSignatures(document.getText(), params.position, Helpers.getSymbols(data, dependenciesData).callables);
+    return Parser.doSignatures(docData.document.getText(), params.position, Helpers.getSymbols(docData.data, dependenciesData).callables);
 });
 
 connection.onDocumentSymbol((params) => {
@@ -265,9 +324,12 @@ connection.onDocumentSymbol((params) => {
         return [];
     }
 
-    const data = documentsData.get(documentsManager.get(params.textDocument.uri));
+    const docData = getDocumentData(params.textDocument.uri);
+    if (!docData) {
+        return [];
+    }
 
-    const symbols: SymbolInformation[] = data.callables.map<SymbolInformation>((clb) => ({
+    const symbols: SymbolInformation[] = docData.data.callables.map<SymbolInformation>((clb) => ({
         name: clb.identifier,
         location: {
             range: {
@@ -290,15 +352,14 @@ connection.onCompletion((params) => {
         };
     }
 
-    const document = documentsManager.get(params.textDocument.uri);
-    if(document === undefined) {
+    const docData = getDocumentData(params.textDocument.uri);
+    if (!docData) {
         return null;
     }
 
-    const data = documentsData.get(document);
     return {
         isIncomplete: true,
-        items: Parser.doCompletions(document.getText(), params.position, data, dependenciesData)
+        items: Parser.doCompletions(docData.document.getText(), params.position, docData.data, dependenciesData)
     };
 });
 
@@ -307,13 +368,21 @@ connection.onHover((params) => {
         return null;
     }
 
-    const document = documentsManager.get(params.textDocument.uri);
-    if(document === undefined) {
+    const docData = getDocumentData(params.textDocument.uri);
+    if (!docData) {
         return null;
     }
 
-    const data = documentsData.get(document);
-    return Parser.doHover(document.getText(), params.position, data, dependenciesData);
+    return Parser.doHover(
+        docData.document.getText(),
+        params.position,
+        docData.data,
+        dependenciesData,
+        {
+            showConstValues: syncedSettings.language.enableHoverConstValues,
+            showDefineInlineComments: syncedSettings.language.enableHoverDefineInlineComments
+        }
+    );
 });
 
 connection.onReferences((params) => {
@@ -321,18 +390,13 @@ connection.onReferences((params) => {
     return [];
   }
 
-  const document = documentsManager.get(params.textDocument.uri);
-  if (document === undefined) {
+  const docData = getDocumentData(params.textDocument.uri);
+  if (!docData) {
     return [];
   }
 
-  const data = documentsData.get(document);
-  if (data === undefined) {
-    return [];
-  }
-
-  const identifier = Parser.getIdentifierForReferences(document.getText(), params.position);
-  return collectReferencesForIdentifier(identifier, data);
+  const identifier = Parser.getIdentifierForReferences(docData.document.getText(), params.position);
+  return collectReferencesForIdentifier(identifier, docData.data);
 });
 
 connection.onCodeLens((params) => {
@@ -340,13 +404,8 @@ connection.onCodeLens((params) => {
         return [];
     }
 
-    const document = documentsManager.get(params.textDocument.uri);
-    if (document === undefined) {
-        return [];
-    }
-
-    const data = documentsData.get(document);
-    if (data === undefined) {
+    const docData = getDocumentData(params.textDocument.uri);
+    if (!docData) {
         return [];
     }
 
@@ -357,8 +416,8 @@ connection.onCodeLens((params) => {
 
     const lenses: CodeLens[] = [];
 
-    data.callables.forEach((clb) => {
-        const allRefs = collectReferencesForIdentifier(clb.identifier, data, openDocsMap, openContents);
+    docData.data.callables.forEach((clb) => {
+        const allRefs = collectReferencesForIdentifier(clb.identifier, docData.data, openDocsMap, openContents);
         const refs = allRefs.filter((loc) => loc.range.start.line !== clb.start.line);
         const refCount = refs.length;
 
@@ -405,17 +464,12 @@ if (inlayHintFeature) {
                 return [];
             }
 
-            const document = documentsManager.get(params.textDocument.uri);
-            if (document === undefined) {
+            const docData = getDocumentData(params.textDocument.uri);
+            if (!docData) {
                 return [];
             }
 
-            const data = documentsData.get(document);
-            if (data === undefined) {
-                return [];
-            }
-
-            return collectInlayHints(document, data);
+            return collectInlayHints(docData.document, docData.data);
         } catch (err) {
             connection.console.error(`InlayHints error: ${String(err)}`);
             return [];
@@ -431,17 +485,12 @@ if (semanticTokensFeature) {
                 return new SemanticTokensBuilder().build();
             }
 
-            const document = documentsManager.get(params.textDocument.uri);
-            if (document === undefined) {
+            const docData = getDocumentData(params.textDocument.uri);
+            if (!docData) {
                 return new SemanticTokensBuilder().build();
             }
 
-            const data = documentsData.get(document);
-            if (data === undefined) {
-                return new SemanticTokensBuilder().build();
-            }
-
-            return collectMacroSemanticTokens(document, data);
+            return collectSemanticTokens(docData.document, docData.data);
         } catch (err) {
             connection.console.error(`SemanticTokens error: ${String(err)}`);
             return new SemanticTokensBuilder().build();
@@ -559,6 +608,36 @@ function isSameLocation(loc: Location, callable: Types.CallableDescriptor): bool
     );
 }
 
+function isSameValueLocation(loc: Location, value: Types.ValueDescriptor): boolean {
+    if (loc.uri !== value.file.toString()) {
+        return false;
+    }
+    if (loc.range.start.line === value.range.start.line) {
+        return true;
+    }
+    return (
+        loc.range.start.line === value.range.start.line &&
+        loc.range.start.character === value.range.start.character &&
+        loc.range.end.line === value.range.end.line &&
+        loc.range.end.character === value.range.end.character
+    );
+}
+
+function isSameRangeLocation(loc: Location, uri: string, range: Range): boolean {
+    if (loc.uri !== uri) {
+        return false;
+    }
+    if (loc.range.start.line === range.start.line) {
+        return true;
+    }
+    return (
+        loc.range.start.line === range.start.line &&
+        loc.range.start.character === range.start.character &&
+        loc.range.end.line === range.end.line &&
+        loc.range.end.character === range.end.character
+    );
+}
+
 function getLineSnippet(
   location: Location,
   openDocsMap: Map<string, TextDocument>,
@@ -591,37 +670,40 @@ function getLineSnippet(
 function collectInlayHints(document: TextDocument, data: Types.DocumentData): InlayHint[] {
     const symbols = Helpers.getSymbols(data, dependenciesData);
     const paramMap = new Map<string, { names: string[]; hasVariadic: boolean }[]>();
-    symbols.callables.forEach((clb) => {
-        const labels = clb.parameters.map((p) => (p.label as string) ?? '');
-        const names = labels.map((label) => getParamName(label)).filter((n) => n.length > 0);
-        const hasVariadic = labels.some((label) => label.indexOf('...') >= 0);
-        if (names.length > 0 || hasVariadic) {
-            const existing = paramMap.get(clb.identifier);
-            if (existing) {
-                existing.push({ names, hasVariadic });
-            } else {
-                paramMap.set(clb.identifier, [{ names, hasVariadic }]);
+    if (syncedSettings.language.enableInlayHintParameters) {
+        symbols.callables.forEach((clb) => {
+            const labels = clb.parameters.map((p) => (p.label as string) ?? '');
+            const names = labels.map((label) => getParamName(label)).filter((n) => n.length > 0);
+            const hasVariadic = labels.some((label) => label.indexOf('...') >= 0);
+            if (names.length > 0 || hasVariadic) {
+                const existing = paramMap.get(clb.identifier);
+                if (existing) {
+                    existing.push({ names, hasVariadic });
+                } else {
+                    paramMap.set(clb.identifier, [{ names, hasVariadic }]);
+                }
             }
-        }
-    });
+        });
+    }
 
     const defineValues = new Map<string, string>();
-    symbols.values.forEach((val) => {
-        if (!val.isConst) {
-            return;
-        }
-        if (!val.label.startsWith('#define ')) {
-            return;
-        }
-        const parts = val.label.split(/\s+/);
-        if (parts.length < 3) {
-            return;
-        }
-        const value = parts.slice(2).join(' ');
-        if (value.length > 0 && isSimpleDefineValue(value)) {
-            defineValues.set(val.identifier, value);
-        }
-    });
+    if (syncedSettings.language.enableInlayHintConstValues) {
+        symbols.values.forEach((val) => {
+            if (!val.isConst) {
+                return;
+            }
+            if (!val.assignedValue) {
+                return;
+            }
+            if (!isSimpleDefineValue(val.assignedValue)) {
+                return;
+            }
+            if (!syncedSettings.language.enableInlayHintConstValueStrings && isStringDefineValue(val.assignedValue)) {
+                return;
+            }
+            defineValues.set(val.identifier, val.assignedValue);
+        });
+    }
 
     const text = document.getText();
     const declRanges = buildCallableDeclarationRanges(text, data);
@@ -831,7 +913,7 @@ function collectDefineValueHints(document: TextDocument, defineValues: Map<strin
                 const pos = document.positionAt(start + ident.length);
                 hints.push({
                     position: pos,
-                    label: `= ${value}`,
+                    label: `<${value}>`,
                     paddingLeft: true,
                     paddingRight: false
                 });
@@ -992,6 +1074,12 @@ function isSimpleDefineValue(value: string): boolean {
     if (text.length === 0) {
         return false;
     }
+    if (text === 'true' || text === 'false') {
+        return true;
+    }
+    if (/[0-9]/.test(text) && /^[0-9A-Fa-fxX\s\(\)\|\&\^\~\<\>\+\-\*\/%]+$/.test(text)) {
+        return true;
+    }
     if (/^0x[0-9a-fA-F]+$/.test(text)) {
         return true;
     }
@@ -1004,15 +1092,31 @@ function isSimpleDefineValue(value: string): boolean {
     return false;
 }
 
-function collectMacroSemanticTokens(document: TextDocument, data: Types.DocumentData) {
+function isStringDefineValue(value: string): boolean {
+    return /^"[^"]*"$/.test(value.trim());
+}
+
+function collectSemanticTokens(document: TextDocument, data: Types.DocumentData) {
     const symbols = Helpers.getSymbols(data, dependenciesData);
     const macros = new Set(symbols.callables.filter((c) => c.isMacro === true).map((c) => c.identifier));
+    const enumTypes = new Set(
+        symbols.values
+            .filter((v) => v.isEnumType === true)
+            .map((v) => v.identifier)
+    );
+    const enumMembers = new Set(
+        symbols.values
+            .filter((v) => v.isEnumMember === true)
+            .map((v) => v.identifier)
+    );
     const builder = new SemanticTokensBuilder();
-    if (macros.size === 0) {
+    const allowEnumUsage = syncedSettings.language.enableSemanticEnumUsage;
+    if (macros.size === 0 && (!allowEnumUsage || (enumTypes.size === 0 && enumMembers.size === 0))) {
         return builder.build();
     }
 
     const text = document.getText();
+    const lines = text.split(/\r?\n/);
     let i = 0;
     let inString = false;
     let inLineComment = false;
@@ -1070,13 +1174,77 @@ function collectMacroSemanticTokens(document: TextDocument, data: Types.Document
             i++;
         }
         const ident = text.substring(identStart, i);
+        const pos = document.positionAt(identStart);
         if (macros.has(ident)) {
-            const pos = document.positionAt(identStart);
             builder.push(pos.line, pos.character, ident.length, 0, 0);
+            continue;
+        }
+        if (allowEnumUsage && enumTypes.has(ident)) {
+            const lineText = lines[pos.line] ?? '';
+            if (!isEnumDeclarationLine(lineText, ident)) {
+                builder.push(pos.line, pos.character, ident.length, 0, 0);
+            }
+            continue;
+        }
+        if (allowEnumUsage && enumMembers.has(ident)) {
+            const lineText = lines[pos.line] ?? '';
+            if (isEnumMemberDeclarationLine(lineText, ident)) {
+                continue;
+            }
+            if (isWithinSquareBrackets(lineText, pos.character)) {
+                builder.push(pos.line, pos.character, ident.length, 0, 0);
+            }
         }
     }
 
     return builder.build();
+}
+
+function isEnumDeclarationLine(lineText: string, ident: string): boolean {
+    if (!/^\s*enum\b/.test(lineText)) {
+        return false;
+    }
+    const re = new RegExp(`\\b${escapeRegExp(ident)}\\b`);
+    return re.test(lineText);
+}
+
+function isEnumMemberDeclarationLine(lineText: string, ident: string): boolean {
+    const trimmed = lineText.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+        return true;
+    }
+    const re = new RegExp(`\\b${escapeRegExp(ident)}\\b`);
+    return re.test(trimmed) && trimmed.endsWith(',');
+}
+
+function isWithinSquareBrackets(lineText: string, character: number): boolean {
+    let i = 0;
+    let inString = false;
+    let bracket = 0;
+    while (i < lineText.length) {
+        const ch = lineText[i];
+        const next = lineText[i + 1];
+        if (!inString && ch === '/' && next === '/') {
+            break;
+        }
+        if (ch === '"' && (i === 0 || lineText[i - 1] !== '^')) {
+            inString = !inString;
+            i++;
+            continue;
+        }
+        if (!inString) {
+            if (ch === '[') {
+                bracket++;
+            } else if (ch === ']') {
+                bracket = Math.max(0, bracket - 1);
+            }
+        }
+        if (i === character) {
+            return bracket > 0;
+        }
+        i++;
+    }
+    return false;
 }
 
 function buildCallableDeclarationRanges(

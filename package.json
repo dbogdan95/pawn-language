@@ -93,57 +93,82 @@
         "amxxpawn.language.reparseInterval": {
           "type": "number",
           "default": 1500,
-          "description": "The shortest allowed interval between two syntax re-parses of the same file"
+          "description": "Minimum time (ms) between re-parsing the same file"
         },
         "amxxpawn.language.webApiLinks": {
           "type": "boolean",
           "default": false,
-          "description": "Should #include statements that contain filenames from AMXX package link to the Web API Reference"
+          "description": "Link AMXX includes to the online API reference"
         },
         "amxxpawn.language.enableDocumentLinks": {
           "type": "boolean",
           "default": true,
-          "description": "Enable document links"
+          "description": "Enable clickable document links"
         },
         "amxxpawn.language.enableGoToDefinition": {
           "type": "boolean",
           "default": true,
-          "description": "Enable go to definition"
+          "description": "Enable Go to Definition (Ctrl+Click)"
         },
         "amxxpawn.language.enableReferences": {
           "type": "boolean",
           "default": true,
-          "description": "Enable find references"
+          "description": "Enable Find References"
         },
         "amxxpawn.language.enableCodeLensReferences": {
           "type": "boolean",
           "default": true,
-          "description": "Enable reference CodeLens"
+          "description": "Show reference counts above declarations"
         },
         "amxxpawn.language.enableInlayHints": {
           "type": "boolean",
           "default": true,
           "description": "Enable inlay hints"
         },
+        "amxxpawn.language.enableInlayHintParameters": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show parameter names inline"
+        },
+        "amxxpawn.language.enableInlayHintConstValues": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show constant values inline"
+        },
+        "amxxpawn.language.enableInlayHintConstValueStrings": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show string constant values inline (can be long)"
+        },
         "amxxpawn.language.enableSignatureHelp": {
           "type": "boolean",
           "default": true,
-          "description": "Enable signature help"
+          "description": "Enable signature help while typing"
         },
         "amxxpawn.language.enableHover": {
           "type": "boolean",
           "default": true,
-          "description": "Enable hover info"
+          "description": "Enable hover tooltips"
+        },
+        "amxxpawn.language.enableHoverConstValues": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show constant values on hover"
+        },
+        "amxxpawn.language.enableHoverDefineInlineComments": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline // comments for #define on hover"
         },
         "amxxpawn.language.enableCompletions": {
           "type": "boolean",
           "default": true,
-          "description": "Enable completions"
+          "description": "Enable autocomplete suggestions"
         },
         "amxxpawn.language.enableDocumentSymbols": {
           "type": "boolean",
           "default": true,
-          "description": "Enable document symbols"
+          "description": "Enable document symbols (Ctrl+Shift+O)"
         },
         "amxxpawn.language.enableDocumentFormatting": {
           "type": "boolean",
@@ -153,42 +178,47 @@
         "amxxpawn.language.enableOnTypeFormatting": {
           "type": "boolean",
           "default": true,
-          "description": "Enable on-type formatting"
+          "description": "Enable on-type formatting while typing"
         },
         "amxxpawn.language.enableSemanticMacros": {
           "type": "boolean",
           "default": true,
-          "description": "Enable macro highlighting"
+          "description": "Highlight macros"
+        },
+        "amxxpawn.language.enableSemanticEnumUsage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight enum usage in [] indexing"
         },
         "amxxpawn.compiler.executablePath": {
           "type": "string",
           "default": "",
-          "description": "Compiler location"
+          "description": "Path to amxxpc executable"
         },
         "amxxpawn.compiler.includePaths": {
           "type": "array",
           "default": [],
-          "description": "An array of strings containing include paths for the compiler"
+          "description": "Additional include directories for the compiler"
         },
         "amxxpawn.compiler.options": {
           "type": "array",
           "default": [],
-          "description": "An array of additional options that should be passed to the compiler"
+          "description": "Extra command-line options for amxxpc"
         },
         "amxxpawn.compiler.showInfoMessages": {
           "type": "boolean",
           "default": false,
-          "description": "Shows additional information like command arguments and exit code when compiling"
+          "description": "Show extra compiler info (args, exit code)"
         },
         "amxxpawn.compiler.reformatOutput": {
           "type": "boolean",
           "default": true,
-          "description": "Should amxxpc output be reformatted to make it more readable"
+          "description": "Reformat compiler output for readability"
         },
         "amxxpawn.compiler.outputType": {
           "type": "string",
           "default": "source",
-          "description": "Where should .amxx files be output. Can be:\n  - 'source' (same as input)\n  - 'path' (specified in amxxpawn.compiler.outputPath setting)",
+          "description": "Where to write .amxx output: 'source' (same folder) or 'path' (use outputPath)",
           "enum": [
             "source",
             "path"
@@ -197,12 +227,12 @@
         "amxxpawn.compiler.outputPath": {
           "type": "string",
           "default": "",
-          "description": "If amxx.compiler.outputType is set to 'path', then use this path to output .amxx files"
+          "description": "Output folder when outputType is 'path'"
         },
         "amxxpawn.compiler.switchToOutput": {
           "type": "boolean",
           "default": true,
-          "description": "Switch to 'Output' tab on build"
+          "description": "Switch to Output panel after compile"
         }
       }
     },

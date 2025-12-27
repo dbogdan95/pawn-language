@@ -59,6 +59,11 @@ export interface ValueDescriptor {
 
   // Is constant?
   isConst: boolean;
+  isEnumMember?: boolean;
+  isEnumType?: boolean;
+  enumGroup?: string;
+  assignedValue?: string;
+  inlineComment?: string;
 
   // Where is it defined
   // TODO: Make this Location

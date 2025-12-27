@@ -17,13 +17,19 @@ export interface LanguageSettings {
     enableReferences: boolean;
     enableCodeLensReferences: boolean;
     enableInlayHints: boolean;
+    enableInlayHintParameters: boolean;
+    enableInlayHintConstValues: boolean;
+    enableInlayHintConstValueStrings: boolean;
     enableSignatureHelp: boolean;
     enableHover: boolean;
+    enableHoverConstValues: boolean;
+    enableHoverDefineInlineComments: boolean;
     enableCompletions: boolean;
     enableDocumentSymbols: boolean;
     enableDocumentFormatting: boolean;
     enableOnTypeFormatting: boolean;
     enableSemanticMacros: boolean;
+    enableSemanticEnumUsage: boolean;
 };
 
 export interface SyncedSettings {

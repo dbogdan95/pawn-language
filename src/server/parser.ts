@@ -38,6 +38,14 @@ interface IdentifierResults {
   position: number;
 }
 
+interface LocalValueInfo {
+  range: Range;
+  isConst: boolean;
+  tag: string;
+  labelAddition: string;
+  assignedValue?: string;
+}
+
 // 1 = storage specifiers
 // 2 = tag
 // 3 = identifier
@@ -121,14 +129,7 @@ function findIdentifierBehindCursor(content: string, cursorIndex: number): strin
       continue;
     } else {
       // Reached the end of the identifier
-      // Remove all digits from the end, an identifier can't start with a digit
-      let identIndex = identifier.length;
-      while (--identIndex >= 0 && StringHelpers.isDigit(identifier[identIndex])) {}
-      if (identIndex !== identifier.length - 1) {
-        identifier = identifier.substring(0, identIndex + 1);
-      }
-
-      return StringHelpers.reverse(identifier);
+      return normalizeIdentifier(StringHelpers.reverse(identifier));
     }
   }
 
@@ -161,13 +162,6 @@ function findIdentifierAtCursor(content: string, cursorIndex: number): { identif
       continue;
     } else {
       // Reached the end of the identifier
-      // Remove all digits from the end, an identifier can't start with a digit
-      let identIndex = result.identifier.length;
-      while (--identIndex >= 0 && StringHelpers.isDigit(result.identifier[identIndex])) {}
-      if (identIndex !== result.identifier.length - 1) {
-        result.identifier = result.identifier.substring(0, identIndex + 1);
-      }
-
       // Reverse the left part
       result.identifier = StringHelpers.reverse(result.identifier);
       break;
@@ -195,6 +189,7 @@ function findIdentifierAtCursor(content: string, cursorIndex: number): { identif
     }
   }
 
+  result.identifier = normalizeIdentifier(result.identifier);
   return result;
 }
 
@@ -386,6 +381,7 @@ function createValueLabel(identifier: string, tag: string, sr: SpecifierResults)
 
 function parseVariableListLine(
   lineContent: string,
+  rawLine: string,
   lineIndex: number,
   fileUri: URI,
   sr: SpecifierResults | null,
@@ -396,30 +392,33 @@ function parseVariableListLine(
     return;
   }
   const content = lineContent.substring(startOffset);
-  const parts = content.split(',');
-  let offset = startOffset;
+  const parts = splitTopLevelComma(content);
+  const baseOffset = rawLine.indexOf(lineContent);
+  const base = (baseOffset >= 0 ? baseOffset : 0) + startOffset;
 
   parts.forEach((part) => {
-    const text = part.trim();
+    const text = part.text.trim();
     if (text.length === 0) {
-      offset += part.length + 1;
       return;
     }
     const match = text.match(/^(?:([A-Za-z_@][\w_@]*)\s*:\s*)?([A-Za-z_@][\w_@]*)/);
     if (!match) {
-      offset += part.length + 1;
       return;
     }
     const tag = match[1] ?? '';
     const identifier = match[2];
-    const identifierIndex = part.indexOf(identifier);
+    const identifierIndex = part.text.indexOf(identifier);
+    const offset = base + part.start;
     const startChar = identifierIndex >= 0 ? offset + identifierIndex : offset;
     const endChar = startChar + identifier.length;
+    const assignedValue = sr.isConst ? extractAssignedValue(part.text) : null;
+    const simpleValue = assignedValue && isSimpleDefineValue(assignedValue) ? assignedValue : undefined;
 
     results.values.push({
       identifier: identifier,
       label: createValueLabel(identifier, tag, sr),
       isConst: sr.isConst,
+      assignedValue: simpleValue,
       file: fileUri,
       range: {
         start: { line: lineIndex, character: startChar },
@@ -428,11 +427,17 @@ function parseVariableListLine(
       documentaton: docComment
     });
 
-    offset += part.length + 1;
   });
 }
 
-function parseEnumLine(lineContent: string, lineIndex: number, fileUri: URI, results: Types.ParserResults) {
+function parseEnumLine(
+  lineContent: string,
+  rawLine: string,
+  lineIndex: number,
+  fileUri: URI,
+  results: Types.ParserResults,
+  enumName?: string
+) {
   let content = lineContent;
   const openIdx = content.indexOf('{');
   if (openIdx >= 0) {
@@ -443,28 +448,31 @@ function parseEnumLine(lineContent: string, lineIndex: number, fileUri: URI, res
     content = content.substring(0, closeIdx);
   }
 
-  const parts = content.split(',');
-  let offset = lineContent.length - content.length;
+  const parts = splitTopLevelComma(content);
+  const baseOffset = rawLine.indexOf(lineContent);
+  const base = lineContent.length - content.length;
   parts.forEach((part) => {
-    let text = part.trim();
+    let text = part.text.trim();
     if (text.length === 0) {
-      offset += part.length + 1;
       return;
     }
-    const match = text.match(/[A-Za-z_@][\w_@]*/);
+    const match = text.match(/^(?:[A-Za-z_@][\w_@]*\s*:\s*)?([A-Za-z_@][\w_@]*)/);
     if (!match) {
-      offset += part.length + 1;
       return;
     }
 
-    const identifier = match[0];
-    const startChar = lineContent.indexOf(identifier, offset);
-    const endChar = startChar >= 0 ? startChar + identifier.length : offset + identifier.length;
+    const identifier = match[1];
+    const lineBase = baseOffset >= 0 ? baseOffset : 0;
+    const offset = base + part.start;
+    const startChar = rawLine.indexOf(identifier, lineBase + offset);
+    const endChar = startChar >= 0 ? startChar + identifier.length : lineBase + offset + identifier.length;
 
     results.values.push({
       identifier: identifier,
       label: `const ${identifier}`,
       isConst: true,
+      isEnumMember: true,
+      enumGroup: enumName,
       file: fileUri,
       range: {
         start: { line: lineIndex, character: Math.max(0, startChar) },
@@ -472,9 +480,31 @@ function parseEnumLine(lineContent: string, lineIndex: number, fileUri: URI, res
       },
       documentaton: docComment
     });
-
-    offset += part.length + 1;
   });
+}
+
+function parseEnumName(lineContent: string, rawLine: string, lineIndex: number, fileUri: URI, results: Types.ParserResults): string | undefined {
+  const match = lineContent.match(/^enum\s+(?:_?\s*:\s*)?([A-Za-z_@][\w_@]*)/);
+  if (!match) {
+    return undefined;
+  }
+  const name = match[1];
+  const startChar = rawLine.indexOf(name);
+  const endChar = startChar >= 0 ? startChar + name.length : name.length;
+
+  results.values.push({
+    identifier: name,
+    label: `enum ${name}`,
+    isConst: true,
+    isEnumType: true,
+    file: fileUri,
+    range: {
+      start: { line: lineIndex, character: Math.max(0, startChar) },
+      end: { line: lineIndex, character: Math.max(0, endChar) }
+    },
+    documentaton: docComment
+  });
+  return name;
 }
 
 export function parse(fileUri: URI, content: string, skipStatic: boolean): Types.ParserResults {
@@ -484,13 +514,15 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
   let inEnum = false;
   let enumDepth = 0;
   let enumAwaitBrace = false;
+  let enumName: string | undefined;
   let inGlobalDecl = false;
   let globalDeclSpec: SpecifierResults | null = null;
   let globalDeclOffset = 0;
+  let globalDeclLine: number | null = null;
 
   let lines = content.split(/\r?\n/);
-  lines.forEach((lineContent, lineIndex) => {
-    lineContent = lineContent.trim();
+  lines.forEach((rawLine, lineIndex) => {
+    let lineContent = rawLine.trim();
     if (lineContent.length === 0) {
       return;
     }
@@ -536,10 +568,11 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
         }
         enumAwaitBrace = false;
       }
-      parseEnumLine(lineContent, lineIndex, fileUri, results);
+      parseEnumLine(lineContent, rawLine, lineIndex, fileUri, results, enumName);
       if (depthAfter < enumDepth) {
         inEnum = false;
         enumDepth = 0;
+        enumName = undefined;
       }
       return;
     }
@@ -553,12 +586,14 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
     }
 
     if (inGlobalDecl) {
-      parseVariableListLine(lineContent, lineIndex, fileUri, globalDeclSpec, results, globalDeclOffset);
+      const startOffset = globalDeclLine === lineIndex ? globalDeclOffset : 0;
+      parseVariableListLine(lineContent, rawLine, lineIndex, fileUri, globalDeclSpec, results, startOffset);
       globalDeclOffset = 0;
       if (lineContent.indexOf(';') >= 0) {
         inGlobalDecl = false;
         globalDeclSpec = null;
         globalDeclOffset = 0;
+        globalDeclLine = null;
       }
       return;
     }
@@ -664,10 +699,26 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
           }
         }
 
+        let value = '';
+        if (params.length === 0 && idx < lineContent.length) {
+          value = lineContent.substring(idx).trim();
+          const lineComment = value.indexOf('//');
+          if (lineComment >= 0) {
+            value = value.substring(0, lineComment).trim();
+          }
+          const blockComment = value.indexOf('/*');
+          if (blockComment >= 0) {
+            value = value.substring(0, blockComment).trim();
+          }
+        }
+
+        const isConstLike = params.length === 0 && isSimpleDefineValue(value);
+
+        const macroDoc = isConstLike ? '' : docComment;
         results.callables.push({
           label: lineContent,
           identifier: macroName,
-          isMacro: true,
+          isMacro: params.length > 0 || isConstLike,
           file: fileUri,
           start: {
             line: lineIndex,
@@ -678,45 +729,40 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
             character: nameStart + macroName.length
           },
           parameters: params,
-          documentaton: docComment
+          documentaton: macroDoc
         });
 
         if (params.length === 0) {
-          let value = '';
-          if (idx < lineContent.length) {
-            value = lineContent.substring(idx).trim();
-            const lineComment = value.indexOf('//');
-            if (lineComment >= 0) {
-              value = value.substring(0, lineComment).trim();
-            }
-            const blockComment = value.indexOf('/*');
-            if (blockComment >= 0) {
-              value = value.substring(0, blockComment).trim();
-            }
-          }
           const label = value.length > 0 ? `#define ${macroName} ${value}` : `#define ${macroName}`;
+          const assignedValue = isSimpleDefineValue(value) ? value : undefined;
+          const inlineComment = extractInlineComment(rawLine);
           results.values.push({
             identifier: macroName,
             label: label,
             isConst: true,
+            assignedValue: assignedValue,
+            inlineComment: inlineComment,
             file: fileUri,
             range: {
               start: { line: lineIndex, character: nameStart },
               end: { line: lineIndex, character: nameStart + macroName.length }
             },
-            documentaton: docComment
+            documentaton: macroDoc
           });
         }
+        docComment = '';
       }
     } else {
       if (lineContent.length >= 4 && lineContent.substring(0, 4) === 'enum') {
+        enumName = parseEnumName(lineContent, rawLine, lineIndex, fileUri, results);
         if (lineContent.indexOf('{') >= 0) {
           inEnum = true;
           enumDepth = depthAfter;
-          parseEnumLine(lineContent, lineIndex, fileUri, results);
+          parseEnumLine(lineContent, rawLine, lineIndex, fileUri, results, enumName);
           if (lineContent.indexOf('}') >= 0) {
             inEnum = false;
             enumDepth = 0;
+            enumName = undefined;
           }
         } else {
           inEnum = true;
@@ -748,11 +794,13 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
               inGlobalDecl = true;
               globalDeclSpec = sr;
               globalDeclOffset = sr.position;
-              parseVariableListLine(lineContent, lineIndex, fileUri, globalDeclSpec, results, globalDeclOffset);
+              globalDeclLine = lineIndex;
+              parseVariableListLine(lineContent, rawLine, lineIndex, fileUri, globalDeclSpec, results, globalDeclOffset);
               if (lineContent.indexOf(';') >= 0) {
                 inGlobalDecl = false;
                 globalDeclSpec = null;
                 globalDeclOffset = 0;
+                globalDeclLine = null;
               }
               return;
             }
@@ -794,6 +842,7 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
           parameters: params,
           documentaton: docComment
         });
+        docComment = '';
       } else {
         let tr = readIdentifier(lineContent, 0);
         if (tr.position === lineContent.length) {
@@ -877,10 +926,13 @@ export function parse(fileUri: URI, content: string, skipStatic: boolean): Types
           }
         }
 
+        const assignedValue = sr.isConst ? extractAssignedValue(lineContent) : null;
+        const simpleValue = assignedValue && isSimpleDefineValue(assignedValue) ? assignedValue : undefined;
         results.values.push({
           identifier: symbol,
           label: createValueLabel(symbol, symbolTag, sr) + labelAddition,
           isConst: sr.isConst,
+          assignedValue: simpleValue,
           file: fileUri,
           range: {
             start: { line: lineIndex, character: 0 },
@@ -969,8 +1021,11 @@ export function doHover(
   content: string,
   position: Position,
   data: Types.DocumentData,
-  dependenciesData: WeakMap<DM.FileDependency, Types.DocumentData>
+  dependenciesData: WeakMap<DM.FileDependency, Types.DocumentData>,
+  options?: { showConstValues?: boolean; showDefineInlineComments?: boolean }
 ): Hover {
+  const showConstValues = options?.showConstValues !== false;
+  const showDefineInlineComments = options?.showDefineInlineComments !== false;
   const cursorIndex = positionToIndex(content, position);
   const result = findIdentifierAtCursor(content, cursorIndex);
 
@@ -1002,6 +1057,22 @@ export function doHover(
       ]
     };
   } else {
+    const localInfo = getLocalValueHoverInfo(content, position, result.identifier);
+    if (localInfo) {
+      if (position.line === localInfo.range.start.line) {
+        return null;
+      }
+      const valueLine = localInfo.assignedValue ? `= ${localInfo.assignedValue}` : '';
+      return {
+        contents: [
+          {
+            language: 'amxxpawn',
+            value: valueLine ? `${localInfo.label}${valueLine}` : localInfo.label
+          }
+        ]
+      };
+    }
+
     const index = symbols.values.map((val) => val.identifier).indexOf(result.identifier);
     if (index < 0) {
       return null;
@@ -1010,16 +1081,26 @@ export function doHover(
     if (position.line === value.range.start.line) {
       return null;
     }
+    const inlineComment = showDefineInlineComments ? (value.inlineComment ? value.inlineComment : '') : '';
+    const docComment = value.label.startsWith('#define ') ? value.documentaton : '';
+    const doc = docComment && inlineComment
+      ? `${docComment}\n${inlineComment}`
+      : (docComment || inlineComment);
+    const valueLine = !showConstValues
+      ? ''
+      : (value.label.startsWith('#define ')
+        ? ''
+        : (value.assignedValue ? `= ${value.assignedValue}` : ''));
 
     return {
       contents: [
         {
           language: 'amxxpawn',
-          value: value.label
+          value: valueLine ? `${value.label}${valueLine}` : value.label
         },
         {
           language: 'pawndoc',
-          value: value.documentaton
+          value: doc
         }
       ]
     };
@@ -1084,6 +1165,28 @@ export function doDefinition(
     }
     return Location.create(value.file.toString(), value.range);
   }
+}
+
+export function getLocalValueRangeAtPosition(
+  content: string,
+  position: Position,
+  identifier: string
+): Range | null {
+  if (!identifier) {
+    return null;
+  }
+  const range = findLocalValueRange(content, position, identifier);
+  if (!range) {
+    return null;
+  }
+  if (
+    position.line === range.start.line &&
+    position.character >= range.start.character &&
+    position.character <= range.end.character
+  ) {
+    return range;
+  }
+  return null;
 }
 
 /**
@@ -1491,4 +1594,270 @@ function isEscapedQuote(text: string, index: number): boolean {
   }
   const prev = text[index - 1];
   return prev === '\\' || prev === '^';
+}
+
+function normalizeIdentifier(identifier: string): string {
+  let i = 0;
+  while (i < identifier.length && StringHelpers.isDigit(identifier[i])) {
+    i++;
+  }
+  return i === 0 ? identifier : identifier.substring(i);
+}
+
+function isSimpleDefineValue(value: string): boolean {
+  const text = value.trim();
+  if (text.length === 0) {
+    return false;
+  }
+  if (text === 'true' || text === 'false') {
+    return true;
+  }
+  if (/[0-9]/.test(text) && /^[0-9A-Fa-fxX\s\(\)\|\&\^\~\<\>\+\-\*\/%]+$/.test(text)) {
+    return true;
+  }
+  if (/^0x[0-9a-fA-F]+$/.test(text)) {
+    return true;
+  }
+  if (/^\d+$/.test(text)) {
+    return true;
+  }
+  if (/^"[^"]*"$/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+function extractAssignedValue(part: string): string | null {
+  const eqIdx = part.indexOf('=');
+  if (eqIdx < 0) {
+    return null;
+  }
+  let value = part.substring(eqIdx + 1).trim();
+  const lineComment = value.indexOf('//');
+  if (lineComment >= 0) {
+    value = value.substring(0, lineComment).trim();
+  }
+  const blockComment = value.indexOf('/*');
+  if (blockComment >= 0) {
+    value = value.substring(0, blockComment).trim();
+  }
+  if (value.endsWith(';')) {
+    value = value.substring(0, value.length - 1).trim();
+  }
+  return value.length > 0 ? value : null;
+}
+
+function extractInlineComment(line: string): string | undefined {
+  const idx = line.indexOf('//');
+  if (idx < 0) {
+    return undefined;
+  }
+  const text = line.substring(idx + 2).trim();
+  return text.length > 0 ? text : undefined;
+}
+
+function splitTopLevelComma(text: string): { text: string; start: number }[] {
+  const parts: { text: string; start: number }[] = [];
+  let start = 0;
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  let inString = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '"' && !isEscapedQuote(text, i)) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"' && !isEscapedQuote(text, i)) {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '(') {
+      depthParen++;
+      continue;
+    }
+    if (ch === ')') {
+      depthParen = Math.max(0, depthParen - 1);
+      continue;
+    }
+    if (ch === '[') {
+      depthBracket++;
+      continue;
+    }
+    if (ch === ']') {
+      depthBracket = Math.max(0, depthBracket - 1);
+      continue;
+    }
+    if (ch === '{') {
+      depthBrace++;
+      continue;
+    }
+    if (ch === '}') {
+      depthBrace = Math.max(0, depthBrace - 1);
+      continue;
+    }
+
+    if (ch === ',' && depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+      parts.push({ text: text.substring(start, i), start });
+      start = i + 1;
+    }
+  }
+
+  parts.push({ text: text.substring(start), start });
+  return parts;
+}
+
+function findDeclaredIdentifierInfo(
+  line: string,
+  identifier: string
+): { start: number; end: number; tag: string; labelAddition: string; part: string } | null {
+  const lineNoSpec = stripDeclSpecifiers(line);
+  const parts = splitTopLevelComma(lineNoSpec);
+  const baseOffset = line.indexOf(lineNoSpec);
+  const base = baseOffset >= 0 ? baseOffset : 0;
+
+  for (const part of parts) {
+    const text = part.text.trim();
+    if (text.length === 0) {
+      continue;
+    }
+    const match = text.match(/^(?:([A-Za-z_@][\w_@]*)\s*:\s*)?([A-Za-z_@][\w_@]*)/);
+    if (!match) {
+      continue;
+    }
+    const tag = match[1] ?? '';
+    const name = match[2];
+    if (name !== identifier) {
+      continue;
+    }
+    const idx = part.text.indexOf(name);
+    const offset = base + part.start;
+    const start = idx >= 0 ? offset + idx : offset;
+    const end = start + identifier.length;
+    const labelAddition = extractLabelAddition(part.text, name);
+    return { start, end, tag, labelAddition, part: part.text };
+  }
+
+  return null;
+}
+
+function extractLabelAddition(part: string, identifier: string): string {
+  const idx = part.indexOf(identifier);
+  if (idx < 0) {
+    return '';
+  }
+  let i = idx + identifier.length;
+  let addition = '';
+  while (i < part.length && part[i] !== '=' && part[i] !== ',' && part[i] !== ';') {
+    addition += part[i];
+    i++;
+  }
+  return addition;
+}
+
+function findLocalValueInfo(
+  content: string,
+  position: Position,
+  identifier: string
+): LocalValueInfo | null {
+  const lines = content.split(/\r?\n/);
+  if (position.line < 0 || position.line >= lines.length) {
+    return null;
+  }
+
+  const depthAtLine = computeLineDepths(content);
+  const startDepth = depthAtLine[position.line] ?? 0;
+  if (startDepth <= 0) {
+    return null;
+  }
+
+  for (let targetDepth = startDepth; targetDepth > 0; targetDepth--) {
+    let blockStart = position.line;
+    while (blockStart >= 0 && (depthAtLine[blockStart] ?? 0) >= targetDepth) {
+      blockStart--;
+    }
+    blockStart = Math.max(0, blockStart + 1);
+
+    let blockEnd = position.line;
+    while (blockEnd < lines.length && (depthAtLine[blockEnd] ?? 0) >= targetDepth) {
+      blockEnd++;
+    }
+    blockEnd = Math.min(lines.length - 1, blockEnd - 1);
+
+    let inDecl = false;
+    let declIsConst = false;
+    for (let lineIndex = blockStart; lineIndex <= blockEnd; lineIndex++) {
+      const depth = depthAtLine[lineIndex] ?? 0;
+      if (depth !== targetDepth) {
+        inDecl = false;
+        declIsConst = false;
+        continue;
+      }
+
+      let line = lines[lineIndex] ?? '';
+      const commentIdx = line.indexOf('//');
+      if (commentIdx >= 0) {
+        line = line.substring(0, commentIdx);
+      }
+      if (line.trim().length === 0) {
+        continue;
+      }
+
+      if (!inDecl && /\b(new|const|static|stock)\b/.test(line)) {
+        inDecl = true;
+        declIsConst = /\bconst\b/.test(line);
+      }
+
+      if (inDecl) {
+        const info = findDeclaredIdentifierInfo(line, identifier);
+        if (info) {
+          const assignedValue = declIsConst ? extractAssignedValue(info.part) : null;
+          return {
+            range: Range.create(
+              { line: lineIndex, character: info.start },
+              { line: lineIndex, character: info.end }
+            ),
+            isConst: declIsConst,
+            tag: info.tag,
+            labelAddition: info.labelAddition,
+            assignedValue: assignedValue ?? undefined
+          };
+        }
+      }
+
+      if (inDecl && line.indexOf(';') >= 0) {
+        inDecl = false;
+        declIsConst = false;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function getLocalValueHoverInfo(
+  content: string,
+  position: Position,
+  identifier: string
+): { label: string; assignedValue?: string; range: Range } | null {
+  const info = findLocalValueInfo(content, position, identifier);
+  if (!info) {
+    return null;
+  }
+
+  const tag = info.tag ? `${info.tag}:` : '';
+  const keyword = info.isConst ? 'const ' : 'new ';
+  const label = `${keyword}${tag}${identifier}${info.labelAddition}`;
+
+  return {
+    label,
+    assignedValue: info.assignedValue,
+    range: info.range
+  };
 }
