@@ -9,6 +9,10 @@ This fork is currently maintained and updated by **Bogdan Deaconu**.
 
 ---
 
+## [Unreleased]
+### Added
+- Per-feature settings toggles for language server features (definitions, references, CodeLens, inlay hints, hover, completions, formatting, semantic macro highlighting, and more)
+
 ## [Version 1.0.0] - 2025-12-27
 ### Added
 - Modernized extension to work with current VS Code versions (2024+)

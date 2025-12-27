@@ -64,13 +64,44 @@ export function activate(ctx: VSC.ExtensionContext) {
     Commands.compileLocal.bind(null, outputChannel, diagnosticCollection)
   );
 
+  const commandOpenLocation = VSC.commands.registerCommand(
+    'amxxpawn.openLocation',
+    async (uriString: string, line: number, character: number) => {
+      const uri = VSC.Uri.parse(uriString);
+      const doc = await VSC.workspace.openTextDocument(uri);
+      const editor = await VSC.window.showTextDocument(doc, { preview: true });
+
+      const pos = new VSC.Position(line, character);
+      editor.selection = new VSC.Selection(pos, pos);
+      editor.revealRange(new VSC.Range(pos, pos), VSC.TextEditorRevealType.InCenter);
+    }
+  );
+
+  const commandShowReferences = VSC.commands.registerCommand(
+    'amxxpawn.showReferences',
+    async (uriString: string, line: number, character: number, locations: any[]) => {
+      const uri = VSC.Uri.parse(uriString);
+      const pos = new VSC.Position(line, character);
+      const refs = (locations || []).map((loc) => {
+        const luri = VSC.Uri.parse(loc.uri);
+        const start = new VSC.Position(loc.range.start.line, loc.range.start.character);
+        const end = new VSC.Position(loc.range.end.line, loc.range.end.character);
+        return new VSC.Location(luri, new VSC.Range(start, end));
+      });
+
+      await VSC.commands.executeCommand('editor.action.showReferences', uri, pos, refs);
+    }
+  );
+
   VSC.workspace.onDidChangeTextDocument(onDidChangeTextDocument);
 
   ctx.subscriptions.push(
     diagnosticCollection,
     commandCompile,
     commandCompileLocal,
-    outputChannel
+    outputChannel,
+    commandOpenLocation,
+    commandShowReferences
   );
 
   void languageClient.start();

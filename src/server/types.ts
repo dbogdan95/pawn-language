@@ -36,6 +36,7 @@ export interface CallableDescriptor {
 
   // Identifier (without storage specifiers and parameters)
   identifier: string;
+  isMacro?: boolean;
 
   // Where in the file is the callable defined
   // TODO: Make this Location

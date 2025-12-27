@@ -3,7 +3,7 @@
   "displayName": "AMXXPawn Language",
   "description": "AMXXPawn Language Service",
   "version": "0.7.6",
-  "publisher": "Bogdan Deaconu",
+  "publisher": "BogdanDeaconu",
   "license": "GPL-3.0",
   "icon": "images/extension-logo.png",
   "galleryBanner": {
@@ -11,7 +11,7 @@
     "color": "#251654"
   },
   "author": {
-    "name": "KliPPy + Bogdan Deaconu",
+    "name": "KliPPy + BogdanDeaconu",
     "url": "https://forums.alliedmods.net/member.php?u=228599"
   },
   "repository": {
@@ -32,12 +32,11 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Languages",
+    "Programming Languages",
     "Linters",
     "Snippets"
   ],
   "activationEvents": [
-    "onLanguage:amxxpawn"
   ],
   "main": "./build/client/client",
   "contributes": {
@@ -100,6 +99,66 @@
           "type": "boolean",
           "default": false,
           "description": "Should #include statements that contain filenames from AMXX package link to the Web API Reference"
+        },
+        "amxxpawn.language.enableDocumentLinks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable document links"
+        },
+        "amxxpawn.language.enableGoToDefinition": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable go to definition"
+        },
+        "amxxpawn.language.enableReferences": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable find references"
+        },
+        "amxxpawn.language.enableCodeLensReferences": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable reference CodeLens"
+        },
+        "amxxpawn.language.enableInlayHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inlay hints"
+        },
+        "amxxpawn.language.enableSignatureHelp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable signature help"
+        },
+        "amxxpawn.language.enableHover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable hover info"
+        },
+        "amxxpawn.language.enableCompletions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable completions"
+        },
+        "amxxpawn.language.enableDocumentSymbols": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable document symbols"
+        },
+        "amxxpawn.language.enableDocumentFormatting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable document formatting"
+        },
+        "amxxpawn.language.enableOnTypeFormatting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable on-type formatting"
+        },
+        "amxxpawn.language.enableSemanticMacros": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable macro highlighting"
         },
         "amxxpawn.compiler.executablePath": {
           "type": "string",

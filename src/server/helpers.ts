@@ -2,6 +2,8 @@
 
 import * as Types from './types';
 import * as DM from './dependency-manager';
+import { Position, Location, Range } from 'vscode-languageserver/node';
+import { URI } from 'vscode-uri';
 
 type CallablesWithLocationResults = Map<string, Types.CallableDescriptor[]>;
 export interface SymbolsResults {
@@ -136,3 +138,60 @@ export function removeUnreachableDependencies(
         }
     }
 }
+
+export function findReferencesInDocument(
+  uri: string,
+  content: string,
+  identifier: string
+): Location[] {
+  const results: Location[] = [];
+  const docUri = URI.parse(uri);
+
+  const wordRe = new RegExp(`\\b${escapeRegExp(identifier)}\\b`, 'g');
+  let m: RegExpExecArray | null;
+
+  while ((m = wordRe.exec(content)) !== null) {
+    const start = indexToPosition(content, m.index);
+    const end = indexToPosition(content, m.index + m[0].length);
+
+    results.push({
+      uri: uri,
+      range: Range.create(start, end)
+    });
+  }
+
+  const strRe = new RegExp(`"${escapeRegExp(identifier)}"`, 'g');
+  while ((m = strRe.exec(content)) !== null) {
+    const start = indexToPosition(content, m.index + 1);
+    const end = indexToPosition(content, m.index + 1 + identifier.length);
+
+    results.push({
+      uri: uri,
+      range: Range.create(start, end)
+    });
+  }
+
+  return results;
+}
+
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function indexToPosition(text: string, idx: number): Position {
+  let line = 0;
+  let ch = 0;
+
+  for (let i = 0; i < idx && i < text.length; i++) {
+    if (text[i] === '\n') {
+      line++;
+      ch = 0;
+    } else {
+      ch++;
+    }
+  }
+
+  return Position.create(line, ch);
+}
+
