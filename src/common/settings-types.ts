@@ -4,6 +4,7 @@ export interface CompilerSettings {
     options: string[];
     outputType: string;
     outputPath: string;
+    outputLinkMode?: string;
     showInfoMessages: boolean;
     reformatOutput: boolean;
     switchToOutput: boolean;

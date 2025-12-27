@@ -229,6 +229,16 @@
           "default": "",
           "description": "Output folder when outputType is 'path'"
         },
+        "amxxpawn.compiler.outputLinkMode": {
+          "type": "string",
+          "default": "both",
+          "description": "Output style for errors/warnings: compact (no links), clickable, or both",
+          "enum": [
+            "compact",
+            "clickable",
+            "both"
+          ]
+        },
         "amxxpawn.compiler.switchToOutput": {
           "type": "boolean",
           "default": true,

@@ -148,6 +148,7 @@ function doCompile(executablePath: string, inputPath: string, compilerSettings: 
                 let filePath = data[0];
                 const diagnostics = data[1].diagnostics;
                 const resourceDiagnostics: VSC.Diagnostic[] = [];
+                const linkMode = compilerSettings.outputLinkMode ?? 'both';
                 
                 if (workspacePath) {
                     const relativePath = Path.relative(workspacePath, filePath);
@@ -158,13 +159,23 @@ function doCompile(executablePath: string, inputPath: string, compilerSettings: 
 
                 outputChannel.appendLine(`===== ${filePath} =====`);
                 diagnostics.filter((diag) => diag.type === 'warning').forEach((diag) => {
-                    outputChannel.appendLine(`WARNING [${diag.startLine}${diag.endLine !== undefined ? ` -- ${diag.endLine}` : ''}]: ${diag.message}`);
-                    
+                    if (linkMode === 'compact' || linkMode === 'both') {
+                        outputChannel.appendLine(`WARNING [${diag.startLine}${diag.endLine !== undefined ? ` -- ${diag.endLine}` : ''}]: ${diag.message}`);
+                    }
+                    if (linkMode === 'clickable' || linkMode === 'both') {
+                        outputChannel.appendLine(`${data[0]}:${diag.startLine}:1: warning ${diag.message}`);
+                    }
+
                     const range = new VSC.Range(diag.startLine - 1, 0, (diag.endLine !== undefined ? diag.endLine : diag.startLine) - 1, Number.MAX_VALUE);
                     resourceDiagnostics.push(new VSC.Diagnostic(range, `WARNING: ${diag.message}`, VSC.DiagnosticSeverity.Warning));
                 });
                 diagnostics.filter((diag) => diag.type === 'error').forEach((diag) => {
-                    outputChannel.appendLine(`ERROR [${diag.startLine}${diag.endLine !== undefined ? ` -- ${diag.endLine}` : ''}]: ${diag.message}`);
+                    if (linkMode === 'compact' || linkMode === 'both') {
+                        outputChannel.appendLine(`ERROR [${diag.startLine}${diag.endLine !== undefined ? ` -- ${diag.endLine}` : ''}]: ${diag.message}`);
+                    }
+                    if (linkMode === 'clickable' || linkMode === 'both') {
+                        outputChannel.appendLine(`${data[0]}:${diag.startLine}:1: error ${diag.message}`);
+                    }
 
                     const range = new VSC.Range(diag.startLine - 1, 0, (diag.endLine !== undefined ? diag.endLine : diag.startLine) - 1, Number.MAX_VALUE);
                     resourceDiagnostics.push(new VSC.Diagnostic(range, `ERROR: ${diag.message}`, VSC.DiagnosticSeverity.Error));
