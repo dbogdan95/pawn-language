@@ -66,11 +66,6 @@ This fork is currently maintained and updated by **Bogdan Deaconu**.
 - Improved internal path resolution logic for better robustness
 - Renamed the extension to **Pawn Language**
 
-### Fixed
-- Removed CodeLens on `#define` declarations
-- Inlay hints for tagged parameters (e.g. `Float:`) now behave correctly
-- Enum member hover now shows enum context and updates when includes change
-
 ---
 
 ## [Version 0.7.0] - 2018-03-01
