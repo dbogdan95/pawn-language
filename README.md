@@ -1,6 +1,6 @@
 # Pawn Language Service
 
-A maintained and modernized fork of the original **AMXXPawn Language** VS Code extension, originally authored by **KliPPy**.
+A maintained and modernized fork of the original **AMXXPawn Language** VS Code extension, originally authored by **KliPPy** (https://github.com/rsKliPPy/amxxpawn-language).
 
 This fork is maintained by **Bogdan Deaconu** and focuses on keeping the extension working on modern VS Code versions while preserving the original behavior and features, now under the name **Pawn Language**.
 
